@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>霸肚燒瓶中繼頁（測試）</title>
+</head>
+<body>
+<p>這是霸肚燒瓶的中繼頁（測試版），單獨打開時沒有功能。</p>
+<script>
+// 霸肚燒瓶・中繼頁測試
+// 用途：被各頁的嵌入程式碼偷偷開在看不見的小框裡；登入資料存在本頁（GitHub Pages）的網域，
+//      讓不同的嵌入頁能讀到同一份資料。
+// 測試版只存一個測試值，不碰任何真實資料。
+(function () {
+  var KEY = 'badu_flask_relay_test';
+
+  function storageOk() {
+    try {
+      localStorage.setItem('__badu_t', '1');
+      localStorage.removeItem('__badu_t');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  window.addEventListener('message', function (ev) {
+    var d = ev.data;
+    if (!d || d.badu !== 'relay-test') return;
+    var reply = { badu: 'relay-test-reply', id: d.id, origin: location.origin, storageOk: storageOk() };
+    try {
+      if (d.cmd === 'save') {
+        localStorage.setItem(KEY, JSON.stringify({ value: String(d.value), time: new Date().toISOString() }));
+        reply.saved = true;
+      } else if (d.cmd === 'load') {
+        var s = localStorage.getItem(KEY);
+        reply.data = s ? JSON.parse(s) : null;
+      } else if (d.cmd === 'clear') {
+        localStorage.removeItem(KEY);
+        reply.cleared = true;
+      }
+    } catch (e) {
+      reply.error = String((e && e.message) || e);
+    }
+    if (ev.source) ev.source.postMessage(reply, ev.origin === 'null' ? '*' : ev.origin);
+  });
+
+  // 告訴外層「中繼頁已就緒」
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ badu: 'relay-test-ready', origin: location.origin, storageOk: storageOk() }, '*');
+  }
+})();
+</script>
+</body>
+</html>
