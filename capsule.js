@@ -1,5 +1,5 @@
 /**
- * 霸肚燒瓶・膠囊 1.0.0
+ * 霸肚燒瓶・膠囊 1.0.1
  * 每一頁共用：認出是誰、回報發生的事、存檔讀檔、膠囊列。
  * 接口說明：專案的 30_膠囊\00_膠囊接口說明.md（頁面只用 霸肚.呼叫(...)）。
  * 規矩：樣式與元素一律 bdc- 開頭；不綁整頁鍵盤；不跑常駐動畫；看得到的文字一律 textContent；
@@ -7,7 +7,7 @@
  */
 (function () {
   'use strict';
-  var 版本 = '1.0.0';
+  var 版本 = '1.0.1';
   if (window.霸肚 && window.霸肚.版本) return; // 同一頁載入兩次時，只留第一個
 
   var 設定 = window.霸肚設定 || {};
@@ -194,10 +194,26 @@
     return null;
   }
 
+  // 1.0.1：回傳多一個「膠囊耗時」（同時送出幾筆、第一次幾毫秒、有沒有因為忙碌重送、總共幾毫秒），用來查回報為什麼慢
+  var 送出中 = 0;
   function 送並重試忙碌(資料) {
+    var 起 = Date.now();
+    var 計 = { 同時送出: 送出中, 重送: false };
+    送出中++;
     return 送中央(資料).then(function (j) {
+      計.第一次毫秒 = Date.now() - 起;
       if (!j.忙碌) return j;
-      return 等(1500 + Math.random() * 1500).then(function () { return 送中央(資料); });
+      計.重送 = true;
+      計.等重送毫秒 = Math.round(1500 + Math.random() * 1500);
+      return 等(計.等重送毫秒).then(function () {
+        var t = Date.now();
+        return 送中央(資料).then(function (j2) { 計.第二次毫秒 = Date.now() - t; return j2; });
+      });
+    }).then(function (j) {
+      送出中--;
+      計.總毫秒 = Date.now() - 起;
+      if (j && typeof j === 'object') j.膠囊耗時 = 計;
+      return j;
     });
   }
 
