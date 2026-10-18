@@ -1,5 +1,5 @@
 /**
- * 霸肚燒瓶・膠囊 1.0.1
+ * 霸肚燒瓶・膠囊 1.0.2
  * 每一頁共用：認出是誰、回報發生的事、存檔讀檔、膠囊列。
  * 接口說明：專案的 30_膠囊\00_膠囊接口說明.md（頁面只用 霸肚.呼叫(...)）。
  * 規矩：樣式與元素一律 bdc- 開頭；不綁整頁鍵盤；不跑常駐動畫；看得到的文字一律 textContent；
@@ -7,7 +7,7 @@
  */
 (function () {
   'use strict';
-  var 版本 = '1.0.1';
+  var 版本 = '1.0.2';
   if (window.霸肚 && window.霸肚.版本) return; // 同一頁載入兩次時，只留第一個
 
   var 設定 = window.霸肚設定 || {};
@@ -37,7 +37,10 @@
   function 頁面Key() {
     if (設定.計數器Key) return String(設定.計數器Key).trim();
     var 標題 = document.getElementById('badu-page-title');
-    var k = String(window.COUNTER_PAGE_KEY || (標題 && 標題.dataset && 標題.dataset.pageKey) || '').trim();
+    // 1.0.2：舊網頁大多寫 const COUNTER_PAGE_KEY = '…'，這種寫法不會掛在 window 上，要直接用名字讀
+    var 全域Key = '';
+    try { if (typeof COUNTER_PAGE_KEY !== 'undefined') 全域Key = COUNTER_PAGE_KEY; } catch (e) { /* 還沒宣告好 */ }
+    var k = String(window.COUNTER_PAGE_KEY || 全域Key || (標題 && 標題.dataset && 標題.dataset.pageKey) || '').trim();
     if (k && k !== '請輸入新工具專屬Key') return k;
     var 字 = String((標題 && 標題.textContent) || document.title || '').trim();
     if (!字 || 字 === '你的新工具名稱' || 字 === 'Badu 新工具名稱') return '';
