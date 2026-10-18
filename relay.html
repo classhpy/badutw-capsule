@@ -2,52 +2,101 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<title>霸肚燒瓶中繼頁（測試）</title>
+<title>霸肚燒瓶中繼頁</title>
 </head>
 <body>
-<p>這是霸肚燒瓶的中繼頁（測試版），單獨打開時沒有功能。</p>
+<p>這是霸肚燒瓶的中繼頁，單獨打開時沒有功能。</p>
 <script>
-// 霸肚燒瓶・中繼頁測試
-// 用途：被各頁的嵌入程式碼偷偷開在看不見的小框裡；登入資料存在本頁（GitHub Pages）的網域，
-//      讓不同的嵌入頁能讀到同一份資料。
-// 測試版只存一個測試值，不碰任何真實資料。
+// 霸肚燒瓶・中繼頁 1.0.0
+// 用途：膠囊在每一頁開一個看不見的小框載入本頁；登入憑證存在本頁（GitHub Pages）的網域，
+//      讓同一個網站的不同頁共用登入。只存中央發的憑證與顯示用的使用者資料，不存通行碼。
+// 閒置規則：最後活動超過 2 小時、或憑證到期，讀取時就清掉（＝自動登出）。
+// 安全：瀏覽器會依「最外層網站」分開儲存，別的網站嵌入本頁讀不到 badu.tw 的登入；另外只回應下面列的網域。
 (function () {
-  var KEY = 'badu_flask_relay_test';
+  var 版本 = '1.0.0';
+  var 鍵 = 'badu_flask_login';
+  var 閒置上限預設 = 2 * 3600 * 1000;
 
-  function storageOk() {
-    try {
-      localStorage.setItem('__badu_t', '1');
-      localStorage.removeItem('__badu_t');
-      return true;
-    } catch (e) {
-      return false;
-    }
+  function 可存() {
+    try { localStorage.setItem('__badu_t', '1'); localStorage.removeItem('__badu_t'); return true; }
+    catch (e) { return false; }
+  }
+
+  function 允許(來源) {
+    if (來源 === 'null') return true; // 本機測試頁（雙擊開的 html）
+    var h;
+    try { h = new URL(來源).hostname; } catch (e) { return false; }
+    return /(^|\.)googleusercontent\.com$/.test(h) || /(^|\.)google\.com$/.test(h) ||
+      /(^|\.)badu\.tw$/.test(h) || h === 'classhpy.github.io' || h === 'localhost' || h === '127.0.0.1';
+  }
+
+  function 讀() { try { var s = localStorage.getItem(鍵); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
+  function 寫(v) { try { localStorage.setItem(鍵, JSON.stringify(v)); return true; } catch (e) { return false; } }
+  function 清() { try { localStorage.removeItem(鍵); } catch (e) {} }
+
+  function 有效(資料, 上限) {
+    if (!資料 || !資料.憑證) return null;
+    var 現在 = Date.now();
+    if (資料.到期 && 現在 > 資料.到期) return null;
+    if (資料.最後活動 && 現在 - 資料.最後活動 > 上限) return null;
+    return 資料;
   }
 
   window.addEventListener('message', function (ev) {
     var d = ev.data;
-    if (!d || d.badu !== 'relay-test') return;
-    var reply = { badu: 'relay-test-reply', id: d.id, origin: location.origin, storageOk: storageOk() };
+    if (!d || !ev.source) return;
+    function 回(物件) { ev.source.postMessage(物件, ev.origin === 'null' ? '*' : ev.origin); }
+
+    // 舊的測試頁（10_測試頁\02_中繼頁測試\01_嵌入測試頁.html）仍可用
+    if (d.badu === 'relay-test') {
+      var 舊 = { badu: 'relay-test-reply', id: d.id, origin: location.origin, storageOk: 可存() };
+      try {
+        if (d.cmd === 'save') { localStorage.setItem('badu_flask_relay_test', JSON.stringify({ value: String(d.value), time: new Date().toISOString() })); 舊.saved = true; }
+        else if (d.cmd === 'load') { var s = localStorage.getItem('badu_flask_relay_test'); 舊.data = s ? JSON.parse(s) : null; }
+        else if (d.cmd === 'clear') { localStorage.removeItem('badu_flask_relay_test'); 舊.cleared = true; }
+      } catch (e) { 舊.error = String((e && e.message) || e); }
+      回(舊);
+      return;
+    }
+
+    if (d.badu !== 'relay') return;
+    var 結果 = { badu: 'relay-reply', id: d.id, 版本: 版本 };
+    if (!允許(ev.origin)) { 結果.錯誤 = '不允許的網域'; 回(結果); return; }
+    // 測試頁可以把閒置上限調短，只能更短、不能更長
+    var 上限 = Number(d.閒置上限毫秒) > 0 ? Math.min(Number(d.閒置上限毫秒), 閒置上限預設) : 閒置上限預設;
     try {
-      if (d.cmd === 'save') {
-        localStorage.setItem(KEY, JSON.stringify({ value: String(d.value), time: new Date().toISOString() }));
-        reply.saved = true;
-      } else if (d.cmd === 'load') {
-        var s = localStorage.getItem(KEY);
-        reply.data = s ? JSON.parse(s) : null;
-      } else if (d.cmd === 'clear') {
-        localStorage.removeItem(KEY);
-        reply.cleared = true;
+      if (d.cmd === '讀') {
+        var 資料 = 有效(讀(), 上限);
+        if (!資料) 清();
+        結果.登入 = 資料;
+      } else if (d.cmd === '存') {
+        結果.好 = 寫({ 憑證: String(d.憑證 || ''), 到期: Number(d.到期) || 0, 使用者: d.使用者 || null, 最後活動: Date.now() });
+      } else if (d.cmd === '活動') {
+        var 資 = 有效(讀(), 上限);
+        if (資) { 資.最後活動 = Date.now(); if (d.使用者) 資.使用者 = d.使用者; 寫(資); } else 清();
+        結果.登入 = 資 || null;
+      } else if (d.cmd === '清') {
+        清();
+        結果.好 = true;
+      } else {
+        結果.錯誤 = '不認得的指令';
       }
     } catch (e) {
-      reply.error = String((e && e.message) || e);
+      結果.錯誤 = String((e && e.message) || e);
     }
-    if (ev.source) ev.source.postMessage(reply, ev.origin === 'null' ? '*' : ev.origin);
+    回(結果);
   });
 
-  // 告訴外層「中繼頁已就緒」
+  // 別的分頁登入、登出時，通知外層的膠囊重新讀一次（不帶任何資料）
+  window.addEventListener('storage', function (e) {
+    if (e.key !== 鍵 && e.key !== null) return;
+    if (window.parent && window.parent !== window) window.parent.postMessage({ badu: 'relay-changed' }, '*');
+  });
+
   if (window.parent && window.parent !== window) {
-    window.parent.postMessage({ badu: 'relay-test-ready', origin: location.origin, storageOk: storageOk() }, '*');
+    var ok = 可存();
+    window.parent.postMessage({ badu: 'relay-ready', 版本: 版本, storageOk: ok, origin: location.origin }, '*');
+    window.parent.postMessage({ badu: 'relay-test-ready', origin: location.origin, storageOk: ok }, '*');
   }
 })();
 </script>
